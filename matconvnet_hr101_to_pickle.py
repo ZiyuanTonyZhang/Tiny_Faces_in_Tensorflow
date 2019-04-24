@@ -11,9 +11,9 @@ from argparse import ArgumentParser
 
 argparse = ArgumentParser()
 argparse.add_argument('--matlab_model_path', type=str, help='Matlab pretrained model.',
-                      default='/path/to/hr_res101.mat')
+                      default='hr_res101.mat')
 argparse.add_argument('--weight_file_path', type=str, help='Weight file for Tensorflow.',
-                      default='/path/to/mat2tf.pkl')
+                      default='./mat2tf.pkl')
 
 args = argparse.parse_args()
 

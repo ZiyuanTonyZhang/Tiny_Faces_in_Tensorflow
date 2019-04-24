@@ -201,9 +201,9 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
 def main():
 
   argparse = ArgumentParser()
-  argparse.add_argument('--weight_file_path', type=str, help='Pretrained weight file.', default="/path/to/mat2tf.pkl")
-  argparse.add_argument('--data_dir', type=str, help='Image data directory.', default="/path/to/input_image_directory")
-  argparse.add_argument('--output_dir', type=str, help='Output directory for images with faces detected.', default="/path/to/output_directory")
+  argparse.add_argument('--weight_file_path', type=str, help='Pretrained weight file.', default="./mat2tf.pkl")
+  argparse.add_argument('--data_dir', type=str, help='Image data directory.', default="/media/tony/44E3B4EB22716E02/GaitNet-Pytorch/DATASET/FVG/FVG-SEG-S1/001_01/")
+  argparse.add_argument('--output_dir', type=str, help='Output directory for images with faces detected.', default="./output")
   argparse.add_argument('--prob_thresh', type=float, help='The threshold of detection confidence(default: 0.5).', default=0.5)
   argparse.add_argument('--nms_thresh', type=float, help='The overlap threshold of non maximum suppression(default: 0.1).', default=0.1)
   argparse.add_argument('--line_width', type=int, help='Line width of bounding boxes(0: auto).', default=3)
