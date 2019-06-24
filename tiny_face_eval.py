@@ -23,6 +23,21 @@ import glob
 
 MAX_INPUT_DIM = 5000.0
 
+def crop_image(raw_img, refined_bboxes):
+  for r in refined_bboxes:
+    _score = expit(r[4])
+    cm_idx = int(np.ceil(_score * 255))
+    rect_color = [int(np.ceil(x * 255)) for x in util.cm_data[cm_idx]]  # parula
+
+
+    _r = [int(x) for x in r[:4]]
+    print(_r[0] - _r[2])
+    print(_r[1] - _r[3])
+    # cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, 1)
+    # return raw_img
+    crop_img = raw_img[_r[1]:_r[3], _r[0]: _r[2]]
+    return crop_img
+
 def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
   """Overlay bounding boxes of face on images.
     Args:
@@ -52,7 +67,7 @@ def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
     cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, _lw)
     
     
-def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh=0.1, lw=3, display=False):
+def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh=0.1, lw=3, display=False, crop=False):
   """Detect faces in images.
   Args:
     prob_thresh:
@@ -112,8 +127,8 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         min_scale = min(np.floor(np.log2(np.max(clusters_w[normal_idx] / raw_w))),
                         np.floor(np.log2(np.max(clusters_h[normal_idx] / raw_h))))
         max_scale = min(1.0, -np.log2(max(raw_h, raw_w) / MAX_INPUT_DIM))
-        scales_down = pl.frange(min_scale, 0, 1.)
-        scales_up = pl.frange(0.5, max_scale, 0.5)
+        scales_down = np.arange(min_scale, 0, 1.)
+        scales_up = np.arange(0.5, max_scale, 0.5)
         scales_pow = np.hstack((scales_down, scales_up))
         scales = np.power(2.0, scales_pow)
         return scales
@@ -187,16 +202,22 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
                                                    max_output_size=bboxes.shape[0], iou_threshold=nms_thresh)
       refind_idx = sess.run(refind_idx)
       refined_bboxes = bboxes[refind_idx]
-      overlay_bounding_boxes(raw_img, refined_bboxes, lw)
+      if crop:
+        if display:
+          plt.imshow(raw_img)
+          plt.show()
+        crop_img = crop_image(raw_img, refined_bboxes)
+        crop_img = cv2.cvtColor(crop_img, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(os.path.join(output_dir, fname), crop_img)
 
-      if display:
-        # plt.axis('off')
-        plt.imshow(raw_img)
-        plt.show()
+      else:
+        if display:
+          plt.imshow(raw_img)
+          plt.show()
+        overlay_bounding_boxes(raw_img, refined_bboxes, lw)
+        raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(os.path.join(output_dir, fname), raw_img)
 
-      # save image with bounding boxes
-      raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
-      cv2.imwrite(os.path.join(output_dir, fname), raw_img)
 
 def main():
 
@@ -208,6 +229,7 @@ def main():
   argparse.add_argument('--nms_thresh', type=float, help='The overlap threshold of non maximum suppression(default: 0.1).', default=0.1)
   argparse.add_argument('--line_width', type=int, help='Line width of bounding boxes(0: auto).', default=3)
   argparse.add_argument('--display', type=bool, help='Display each image on window.', default=False)
+  argparse.add_argument('--crop', type=bool, help='Crop the face and output.', default=False)
 
   args = argparse.parse_args()
 
@@ -221,7 +243,7 @@ def main():
     evaluate(
       weight_file_path=args.weight_file_path, data_dir=args.data_dir, output_dir=args.output_dir,
       prob_thresh=args.prob_thresh, nms_thresh=args.nms_thresh,
-      lw=args.line_width, display=args.display)
+      lw=args.line_width, display=args.display, crop=args.crop)
 
 if __name__ == '__main__':
   main()
