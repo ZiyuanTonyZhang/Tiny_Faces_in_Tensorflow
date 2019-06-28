@@ -25,16 +25,7 @@ MAX_INPUT_DIM = 5000.0
 
 def crop_image(raw_img, refined_bboxes):
   for r in refined_bboxes:
-    _score = expit(r[4])
-    cm_idx = int(np.ceil(_score * 255))
-    rect_color = [int(np.ceil(x * 255)) for x in util.cm_data[cm_idx]]  # parula
-
-
     _r = [int(x) for x in r[:4]]
-    print(_r[0] - _r[2])
-    print(_r[1] - _r[3])
-    # cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, 1)
-    # return raw_img
     crop_img = raw_img[_r[1]:_r[3], _r[0]: _r[2]]
     return crop_img
 
@@ -111,6 +102,8 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   clusters_h = clusters[:, 3] - clusters[:, 1] + 1
   clusters_w = clusters[:, 2] - clusters[:, 0] + 1
   normal_idx = np.where(clusters[:, 4] == 1)
+  count = 0
+  failure = []
 
   # main
   with tf.Session() as sess:
@@ -140,8 +133,8 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
       bboxes = np.empty(shape=(0, 5))
 
       # process input at different scales
+      print("Processing {}, count {}".format(fname, count))
       for s in scales:
-        print("Processing {} at scale {:.4f}".format(fname, s))
         img = cv2.resize(raw_img_f, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
         img = img - average_image
         img = img[np.newaxis, :]
@@ -193,15 +186,18 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         bboxes = np.vstack((bboxes, tmp_bboxes)) # <class 'tuple'>: (5265, 5)
 
 
-      print("time {:.2f} secs for {}".format(time.time() - start, fname))
-
-      # non maximum suppression
-      # refind_idx = util.nms(bboxes, nms_thresh)
+      count+=1
+      
       refind_idx = tf.image.non_max_suppression(tf.convert_to_tensor(bboxes[:, :4], dtype=tf.float32),
                                                    tf.convert_to_tensor(bboxes[:, 4], dtype=tf.float32),
                                                    max_output_size=bboxes.shape[0], iou_threshold=nms_thresh)
       refind_idx = sess.run(refind_idx)
       refined_bboxes = bboxes[refind_idx]
+      if(refined_bboxes.size == 0):
+        print("Processing Failed for {}!".format(fname))
+        failure.append(fname)
+        continue
+
       if crop:
         if display:
           plt.imshow(raw_img)
@@ -217,6 +213,10 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         overlay_bounding_boxes(raw_img, refined_bboxes, lw)
         raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(os.path.join(output_dir, fname), raw_img)
+
+      print("time {:.2f} secs for {}".format(time.time() - start, fname))
+    print("Finished processing {} images.".format(count - len(failure)))
+    print("Following images are failed to process: {}".format(failure))
 
 
 def main():
