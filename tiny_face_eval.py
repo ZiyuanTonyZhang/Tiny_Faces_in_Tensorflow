@@ -56,8 +56,7 @@ def overlay_bounding_boxes(raw_img, refined_bboxes, lw):
 
     _r = [int(x) for x in r[:4]]
     cv2.rectangle(raw_img, (_r[0], _r[1]), (_r[2], _r[3]), rect_color, _lw)
-    
-    
+
 def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh=0.1, lw=3, display=False, crop=False):
   """Detect faces in images.
   Args:
@@ -80,7 +79,7 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   Returns:
     None.
   """
-
+  program_begin = time.time()
   # placeholder of input images. Currently batch size of one is supported.
   x = tf.placeholder(tf.float32, [1, None, None, 3]) # n, h, w, c
 
@@ -92,7 +91,6 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   filenames = []
   for ext in ('*.png', '*.gif', '*.jpg', '*.jpeg'):
     filenames.extend(glob.glob(os.path.join(data_dir, ext)))
-
   # Load an average image and clusters(reference boxes of templates).
   with open(weight_file_path, "rb") as f:
     _, mat_params_dict = pickle.load(f)
@@ -104,17 +102,18 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
   normal_idx = np.where(clusters[:, 4] == 1)
   count = 0
   failure = []
+  time_stat = []
 
   # main
   with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
 
     for filename in filenames:
+      t0 = time.time()
       fname = filename.split(os.sep)[-1]
       raw_img = cv2.imread(filename)
       raw_img = cv2.cvtColor(raw_img, cv2.COLOR_BGR2RGB)
       raw_img_f = raw_img.astype(np.float32)
-
       def _calc_scales():
         raw_h, raw_w = raw_img.shape[0], raw_img.shape[1]
         min_scale = min(np.floor(np.log2(np.max(clusters_w[normal_idx] / raw_w))),
@@ -127,13 +126,13 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         return scales
 
       scales = _calc_scales()
-      start = time.time()
 
       # initialize output
       bboxes = np.empty(shape=(0, 5))
 
+      t1 = time.time()
       # process input at different scales
-      print("Processing {}, count {}".format(fname, count))
+      #print("Processing {}, count {}".format(fname, count))
       for s in scales:
         img = cv2.resize(raw_img_f, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_LINEAR)
         img = img - average_image
@@ -186,13 +185,15 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         bboxes = np.vstack((bboxes, tmp_bboxes)) # <class 'tuple'>: (5265, 5)
 
 
-      count+=1
+      t2 = time.time()
       
       refind_idx = tf.image.non_max_suppression(tf.convert_to_tensor(bboxes[:, :4], dtype=tf.float32),
                                                    tf.convert_to_tensor(bboxes[:, 4], dtype=tf.float32),
                                                    max_output_size=bboxes.shape[0], iou_threshold=nms_thresh)
       refind_idx = sess.run(refind_idx)
       refined_bboxes = bboxes[refind_idx]
+      t3 = time.time()
+      
       if(refined_bboxes.size == 0):
         print("Processing Failed for {}!".format(fname))
         failure.append(fname)
@@ -203,6 +204,10 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
           plt.imshow(raw_img)
           plt.show()
         crop_img = crop_image(raw_img, refined_bboxes)
+        if(crop_img.size == 0):
+          print("Processing Failed for {}!".format(fname))
+          failure.append(fname)
+          continue
         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(os.path.join(output_dir, fname), crop_img)
 
@@ -213,14 +218,23 @@ def evaluate(weight_file_path, data_dir, output_dir, prob_thresh=0.5, nms_thresh
         overlay_bounding_boxes(raw_img, refined_bboxes, lw)
         raw_img = cv2.cvtColor(raw_img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(os.path.join(output_dir, fname), raw_img)
-
-      print("time {:.2f} secs for {}".format(time.time() - start, fname))
+      
+      count+=1
+      t4 = time.time()
+      time_sess = [round(t1 - t0, 4), round(t2 - t1, 4), round(t3 - t2, 4), round(t4 - t3, 4), round(t4 - t0, 4)]
+      time_stat.append(time_sess)
+      #print("image: {}, time: {}".format(fname, ["%0.4f" % i for i in time_sess]))
     print("Finished processing {} images.".format(count - len(failure)))
     print("Following images are failed to process: {}".format(failure))
+    # print("---------------------time stat---------------------")
+    # for t_sess in time_stat:
+    #   print (["%0.4f" % i for i in t_sess])
+    # print("Total Time: {}".format(round(time.time()-program_begin, 4)))
 
 
 def main():
 
+  tf.enable_eager_execution()
   argparse = ArgumentParser()
   argparse.add_argument('--weight_file_path', type=str, help='Pretrained weight file.', default="./mat2tf.pkl")
   argparse.add_argument('--data_dir', type=str, help='Image data directory.', default="/media/tony/44E3B4EB22716E02/GaitNet-Pytorch/DATASET/FVG/FVG-SEG-S1/001_01/")
