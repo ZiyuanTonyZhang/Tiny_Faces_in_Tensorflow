@@ -38,6 +38,11 @@ def crop_image(raw_img, refined_bboxes):
       r1 = r0 - h
       r2 = _r[2]
       r3 = _r[3]
+    elif(w == h):
+      r0 = _r[0]
+      r1 = _r[1]
+      r2 = _r[2]
+      r3 = _r[3]
     crop_img = raw_img[r1:r3, r0:r2]
     return crop_img
 
